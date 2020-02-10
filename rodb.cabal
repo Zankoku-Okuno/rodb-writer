@@ -1,0 +1,50 @@
+cabal-version: 3.0
+name: rodb
+version: 0.1.0.0
+synopsis: read-only database mapping hashes to fixed-size values
+description:
+  A key/value database optimized for fast lookup scaling to many gigabytes of
+  data. It operates under the assumption that writes are rare so that the db
+  is reconstructed offline and that the keys are sufficiently uniformly
+  distributed (e.g. hashes).
+  .
+  This package includes a specification of the file format,
+  a library for reading/writing the database,
+  and a CLI tool that builds the database from a binary-encoded association
+  list.
+
+homepage: https://github.com/Zankoku-Okuno/rodb
+bug-reports: https://github.com/Zankoku-Okuno/rodb/issues
+license: BSD-3-Clause
+license-file: LICENSE
+author: Eric Demko
+maintainer: edemko@layer3com.com
+copyright: 2020, Eric Demko
+category: Database
+build-type: Simple
+extra-source-files: CHANGELOG.md
+
+library
+  exposed-modules:
+    Database.Rodb.Writer
+  build-depends:
+    , base >=4.13 && <5
+    , byte-order >=0.1.2
+    , bytestring >=0.10
+    , mmap >=0.5.9
+    , unix >=2.7
+    , vector >=0.12
+  hs-source-dirs: src
+  default-language: Haskell2010
+  ghc-options: -Wall -O2
+
+executable rodb
+  main-is: Main.hs
+  -- other-modules:
+  build-depends:
+    , base >=4.13 && <5
+    , rodb
+    , vector >=0.12
+  hs-source-dirs: app
+  default-language: Haskell2010
+  ghc-options: -Wall -O2
