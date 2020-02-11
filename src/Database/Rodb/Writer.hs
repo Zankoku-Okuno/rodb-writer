@@ -1,6 +1,5 @@
 {-# language BangPatterns #-}
 {-# language DataKinds #-}
-{-# language DuplicateRecordFields #-}
 {-# language MagicHash #-}
 {-# language NamedFieldPuns #-}
 {-# language ScopedTypeVariables #-}
@@ -8,7 +7,9 @@
 
 module Database.Rodb.Writer
   ( Rodb
+  , sizes
   , Config(..)
+  , Sizes(..)
   , scanRawRows
   , BucketSizesElems
   , withRodb
@@ -53,9 +54,9 @@ type BucketSizesElems = Vector Word64
 
 data Sizes = Sizes
   -- configured
-  { keySizeBytes :: Int
-  , prefixSizeBits :: Int
-  , valSizeBytes :: Int
+  { keySizeBytes_ :: Int
+  , prefixSizeBits_ :: Int
+  , valSizeBytes_ :: Int
   -- calculated
   , headerSizeBytes :: Int
   , offsetSizeBytes :: Int
@@ -70,6 +71,7 @@ data Sizes = Sizes
   , dataOffsetBytes :: Int
   , bucketSizes :: BucketSizesElems
   , numBuckets :: Int
+  , numRows :: Int
   }
 
 
@@ -121,7 +123,7 @@ withRodb filepath config bucketSizes k = do
 
 insert :: Rodb -> ByteString -> ByteString -> IO ()
 insert rodb@Rodb{sizes=Sizes
-    {keySizeBytes,prefixSizeBytes,prefixSizeBits,suffixSizeBytes}
+    {keySizeBytes_=keySizeBytes,prefixSizeBytes,prefixSizeBits_=prefixSizeBits,suffixSizeBytes}
   } key val = do
   -- check key size
   when (BS.length key > keySizeBytes) $ do
@@ -146,20 +148,22 @@ calculate Config{keySizeBytes,prefixSizeBits,valSizeBytes} bucketSizes =
       suffixSizeBytes = keySizeBytes - (prefixSizeBits `div` 8)
       alignSizeBytes = 0 -- TODO
       rowSizeBytes = suffixSizeBytes + valSizeBytes
-      dataTableSizeBytes = (suffixSizeBytes + valSizeBytes) * (fromIntegral $ V.sum bucketSizes)
+      numRows = fromIntegral $ V.sum bucketSizes
+      dataTableSizeBytes = rowSizeBytes * numRows
       dbSizeBytes = headerSizeBytes + prefixTableSizeBytes + alignSizeBytes + dataTableSizeBytes
       prefixOffsetBytes = headerSizeBytes
       dataOffsetBytes = prefixOffsetBytes + prefixTableSizeBytes + alignSizeBytes
    in Sizes
-      {keySizeBytes,prefixSizeBits,valSizeBytes
+      {keySizeBytes_=keySizeBytes,prefixSizeBits_=prefixSizeBits,valSizeBytes_=valSizeBytes
       ,headerSizeBytes,offsetSizeBytes,prefixSizeBytes,prefixTableSizeBytes
       ,suffixSizeBytes,alignSizeBytes,dataTableSizeBytes,dbSizeBytes
       ,prefixOffsetBytes,dataOffsetBytes,bucketSizes,numBuckets,rowSizeBytes
+      ,numRows
       }
 
 writeHeader :: Rodb -> IO ()
 writeHeader Rodb{header,sizes=Sizes
-    {keySizeBytes,prefixSizeBits,suffixSizeBytes,offsetSizeBytes,valSizeBytes,dataOffsetBytes}
+    {keySizeBytes_=keySizeBytes,prefixSizeBits_=prefixSizeBits,suffixSizeBytes,offsetSizeBytes,valSizeBytes_=valSizeBytes,dataOffsetBytes}
   } = do
   pokeElemOff header 0 (Fixed 0xb4a10963)
   pokeElemOff header 1 (Fixed $ fromIntegral @Int @Word32 keySizeBytes)
@@ -209,7 +213,7 @@ readBucketBounds rodb@Rodb{sizes=Sizes{rowSizeBytes}} i = do
 
 insertToBucket :: Rodb -> ByteString -> ByteString -> (Int, Int) -> IO ()
 insertToBucket rodb@Rodb{dataTable,sizes=Sizes
-    {suffixSizeBytes,valSizeBytes,rowSizeBytes}
+    {suffixSizeBytes,valSizeBytes_=valSizeBytes,rowSizeBytes}
   } suffix val (start, end) = do
   -- check value size
   when (BS.length val /= valSizeBytes) $ do
