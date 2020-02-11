@@ -2,18 +2,16 @@
 
 module Main where
 
+import Options.Applicative
 import Database.Rodb.Writer
 
-import qualified Data.Vector.Unboxed as V
+import qualified Data.ByteString.Lazy as LBS
 
 main :: IO ()
 main = do
-  let conf = Config
-        { keySizeBytes = 1
-        , prefixSizeBits = 2
-        , valSizeBytes = 8
-        }
-  withRodb "delme.rodb" conf (V.fromList [3,1,2,4]) $ \db -> do
+  (conf, ifile, ofile) <- execParser options
+  bucketSizes <- (\bs -> scanRawRows bs conf) <$> LBS.readFile ifile
+  withRodb ofile conf bucketSizes $ \db -> do
     insert db "\x03" "   world"
     insert db "\x01" "someword"
     insert db "\xF2" "goodbye!"
@@ -21,3 +19,43 @@ main = do
     insert db "\xE2" "goodbye3"
     insert db "\xD2" "goodbye2"
     insert db "\xC2" "goodbye1"
+
+
+options :: ParserInfo (Config, FilePath, FilePath)
+options = info (argParser <**> helper)
+   ( fullDesc
+  <> progDesc "Convert an unordered file of key-value pairs to an RODB-format \"database\"."
+  <> header "rodb-writer - create RODB files"
+  )
+
+argParser :: Parser (Config, FilePath, FilePath)
+argParser = (,,) <$>
+  configParser
+  <*> strOption
+    ( long "input-file"
+   <> short 'i'
+   <> metavar "FILE"
+   <> help "Input data file" )
+  <*> strOption
+    ( long "output-file"
+   <> short 'o'
+   <> metavar "FILE"
+   <> help "Output data file" )
+
+configParser :: Parser Config
+configParser = Config
+  <$> option auto
+    ( long "key-size"
+   <> short 'K'
+   <> metavar "BYTECOUNT"
+   <> help "Total number of bytes in the key" )
+  <*> option auto
+    ( long "prefix-size"
+   <> short 'b'
+   <> metavar "BITCOUNT"
+   <> help "Number of leading bits to use for bucketing" )
+  <*> option auto
+    ( long "value-size"
+   <> short 'V'
+   <> metavar "BYTECOUNT"
+   <> help "Number of bytes with which to store values" )
