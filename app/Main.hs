@@ -12,13 +12,20 @@ main = do
   (conf, ifile, ofile) <- execParser options
   bucketSizes <- (\bs -> scanRawRows bs conf) <$> LBS.readFile ifile
   withRodb ofile conf bucketSizes $ \db -> do
-    insert db "\x03" "   world"
-    insert db "\x01" "someword"
-    insert db "\xF2" "goodbye!"
-    insert db "\x02" "hello   "
-    insert db "\xE2" "goodbye3"
-    insert db "\xD2" "goodbye2"
-    insert db "\xC2" "goodbye1"
+    let rowSize = fromIntegral $ keySizeBytes conf + valSizeBytes conf
+        loop inp
+          | LBS.length inp < rowSize = pure ()
+          | otherwise = do
+              insert db (LBS.toStrict $ LBS.take (fromIntegral $ keySizeBytes conf) inp) (LBS.toStrict $ LBS.take (fromIntegral $ valSizeBytes conf) $ LBS.drop (fromIntegral $ keySizeBytes conf) inp)
+              loop $ LBS.drop rowSize inp
+    loop =<< LBS.readFile ifile
+    -- insert db "\x03" "   world"
+    -- insert db "\x01" "someword"
+    -- insert db "\xF2" "goodbye!"
+    -- insert db "\x02" "hello   "
+    -- insert db "\xE2" "goodbye3"
+    -- insert db "\xD2" "goodbye2"
+    -- insert db "\xC2" "goodbye1"
 
 
 options :: ParserInfo (Config, FilePath, FilePath)
