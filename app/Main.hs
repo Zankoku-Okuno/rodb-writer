@@ -9,25 +9,25 @@ import Database.Rodb.Writer
 import Control.Monad (when)
 import System.IO (hPutStrLn,hPutStr,stderr)
 
-import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString as BS
 
 main :: IO ()
 main = do
   (conf, ifile, ofile) <- execParser options
   putErrLn "scanning for bucket sizes"
-  bucketSizes <- (\bs -> scanRawRows bs conf) <$> LBS.readFile ifile
+  bucketSizes <- (\bs -> scanRawRows bs conf) <$> BS.readFile ifile
   putErrLn "create header and prefix table"
   withRodb ofile conf bucketSizes $ \db -> do
     let rowcnt = numRows (sizes db)
     let rowSize = fromIntegral $ keySizeBytes conf + valSizeBytes conf
         loop !i inp
-          | LBS.length inp < rowSize = putErrLn "DONE ☺"
+          | BS.length inp < rowSize = putErrLn "DONE ☺"
           | otherwise = do
               when (i `mod` (max 1 $ rowcnt `div` 100) == 0) $
                 putErr "."
-              insert db (LBS.toStrict $ LBS.take (fromIntegral $ keySizeBytes conf) inp) (LBS.toStrict $ LBS.take (fromIntegral $ valSizeBytes conf) $ LBS.drop (fromIntegral $ keySizeBytes conf) inp)
-              loop (i + 1) $ LBS.drop rowSize inp
-    loop 0 =<< LBS.readFile ifile
+              insert db (BS.take (keySizeBytes conf) inp) (BS.take (valSizeBytes conf) $ BS.drop (keySizeBytes conf) inp)
+              loop (i + 1) $ BS.drop rowSize inp
+    loop 0 =<< BS.readFile ifile
 
 
 options :: ParserInfo (Config, FilePath, FilePath)

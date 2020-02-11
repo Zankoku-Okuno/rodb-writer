@@ -30,7 +30,6 @@ import System.IO.MMap (mmapFilePtr, Mode(ReadWrite), munmapFilePtr)
 import System.Posix.Files (setFileSize)
 
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as Mut
 
@@ -75,20 +74,20 @@ data Sizes = Sizes
   }
 
 
-scanRawRows :: LBS.ByteString -> Config -> BucketSizesElems
+scanRawRows :: BS.ByteString -> Config -> BucketSizesElems
 scanRawRows input0 Config{keySizeBytes,prefixSizeBits,valSizeBytes} = V.create $ do
   arr <- Mut.replicate (2 ^ prefixSizeBits) 0
   loop arr input0
   where
   rowSizeBytes = keySizeBytes + valSizeBytes
   loop arr input
-    | fromIntegral (LBS.length input) < rowSizeBytes = pure arr
+    | BS.length input < rowSizeBytes = pure arr
     | otherwise = do
-        let prefix = bytesToWord . LBS.toStrict $ LBS.take (fromIntegral prefixSizeBytes) input
+        let prefix = bytesToWord $ BS.take prefixSizeBytes input
             bucketIx = fromIntegral @Word64 @Int $
               shiftR prefix (prefixSizeBytes * 8 - prefixSizeBits)
         Mut.modify arr (+1) bucketIx
-        loop arr (LBS.drop (fromIntegral rowSizeBytes) input)
+        loop arr (BS.drop rowSizeBytes input)
   prefixSizeBytes = (alignTo 8 prefixSizeBits) `div` 8
 
 
